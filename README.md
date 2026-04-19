@@ -1,11 +1,18 @@
 # HuaLi_garbage_system
 
-> 本项目为大学生计算机设计大赛参赛项目，面向智慧校园与智慧社区场景，构建了一个集目标检测、视频异步处理、告警留存与统计分析于一体的智能巡检系统。项目现已采用 `FastAPI + Celery + SQLite + YOLO/ONNX` 架构，并提供 Windows 一键启动脚本 `start_queue.bat`。
+> 本项目为大学生计算机设计大赛参赛项目，面向智慧校园与智慧社区场景，构建了一个集目标检测、视频异步处理、告警留存与统计分析于一体的智能巡检系统。项目目前采用 `FastAPI + Celery + SQLite + YOLO/ONNX` 架构，并提供 Windows 一键启动脚本 `start_queue.bat`。
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Uvicorn](https://img.shields.io/badge/Uvicorn-ASGI-4051B5)](https://www.uvicorn.org/)
+[![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063)](https://docs.pydantic.dev/)
+[![Jinja2](https://img.shields.io/badge/Jinja2-Templates-B41717)](https://jinja.palletsprojects.com/)
 [![Celery](https://img.shields.io/badge/Celery-5.4%2B-37814A?logo=celery)](https://docs.celeryq.dev/)
 [![Redis](https://img.shields.io/badge/Redis-5.2%2B-DC382D?logo=redis)](https://redis.io/)
+[![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite)](https://www.sqlite.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy)](https://www.sqlalchemy.org/)
+[![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B-5C3EE8?logo=opencv)](https://opencv.org/)
+[![NumPy](https://img.shields.io/badge/NumPy-Array-013243?logo=numpy)](https://numpy.org/)
 [![Ultralytics](https://img.shields.io/badge/Ultralytics-YOLO-FF9F00)](https://github.com/ultralytics/ultralytics)
 [![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-1.20%2B-grey?logo=onnx)](https://onnxruntime.ai/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -112,29 +119,19 @@ git clone https://github.com/Nyzeep/HuaLi_garbage_system.git
 cd HuaLi_garbage_system
 ```
 
-### 2. 创建虚拟环境
+### 2. 手动创建虚拟环境
 
-如果你准备使用 `start_queue.bat`，建议直接创建 `.venv311`：
-
-```bash
-py -3.11 -m venv .venv311
-```
-
-手动启动也可以使用任意名字的虚拟环境，例如：
+如果你准备手动启动项目，推荐这样创建虚拟环境：
 
 ```bash
 python -m venv .venv
 ```
 
+如果你已经有自己的虚拟环境目录名，也可以继续沿用，`start_queue.bat` 会自动尝试检测项目根目录下可用的虚拟环境。
+
 ### 3. 激活虚拟环境
 
 Windows:
-
-```bash
-.venv311\Scripts\activate
-```
-
-如果你创建的是 `.venv`，则改成：
 
 ```bash
 .venv\Scripts\activate
@@ -189,21 +186,23 @@ CELERY_TASK_ALWAYS_EAGER=false
 start_queue.bat
 ```
 
-这个脚本会做四件事：
+这个脚本会按下面的流程自动处理：
 
-1. 检查 `.venv311` 是否存在
-2. 检查 Windows 服务 `Redis` 是否在运行，不在则尝试 `net start Redis`
-3. 新开一个窗口启动 Celery Worker
-4. 新开一个窗口启动 FastAPI，并自动打开浏览器
+1. 检测当前激活的虚拟环境，或扫描项目根目录下是否存在可用虚拟环境
+2. 如果没有找到可用虚拟环境，则自动创建 `.venv`
+3. 如果检测到依赖缺失，则自动执行 `pip install -r requirements.txt`
+4. 检查 Windows 服务 `Redis` 是否在运行，不在则尝试 `net start Redis`
+5. 新开一个窗口启动 Celery Worker
+6. 新开一个窗口启动 FastAPI，并自动打开浏览器
 
 脚本里实际执行的核心命令是：
 
 ```bash
 python -m celery -A app.celery_app worker --loglevel=info --pool=solo
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-如果你的虚拟环境不是 `.venv311`，或者 Redis 不是以 `Redis` 这个 Windows 服务名安装的，这个脚本就需要对应调整。
+如果本机没有安装 Python，或者 Redis 服务没有安装为 `Redis` 这个 Windows 服务名，脚本会提示并停止。
 
 ### 方式二：手动启动
 
@@ -225,13 +224,13 @@ python -m celery -A app.celery_app worker --loglevel=info --pool=solo
 
 服务启动后可访问：
 
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/detection`
-- `http://127.0.0.1:8000/video`
-- `http://127.0.0.1:8000/alerts`
-- `http://127.0.0.1:8000/statistics`
-- `http://127.0.0.1:8000/dataset`
-- `http://127.0.0.1:8000/docs`
+- `http://127.0.0.1:8000/`: 首页，用于查看项目简介、能力概览和快速导航
+- `http://127.0.0.1:8000/detection`: 检测页，用于上传图片或提交图像数据进行识别
+- `http://127.0.0.1:8000/video`: 视频检测页，用于上传视频、提交异步任务并查看处理结果
+- `http://127.0.0.1:8000/alerts`: 告警页，用于查看历史告警记录和告警截图
+- `http://127.0.0.1:8000/statistics`: 统计页，用于查看检测数量、告警数量和类别统计
+- `http://127.0.0.1:8000/dataset`: 数据集展示页，用于展示项目涉及的数据集与类别信息
+- `http://127.0.0.1:8000/docs`: FastAPI 接口文档页，用于接口调试和开发联调
 
 ## 常用接口
 
