@@ -1,5 +1,3 @@
-
-
 import os
 import cv2
 import json
@@ -15,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 from detector import MyDetector, frame_to_base64, ALL_CLASSES, BIN_TYPES
 
-
+# ===== 基础配置 =====
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "bmp", "mp4", "avi", "mov"}
@@ -25,12 +23,12 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 app.secret_key = "my_secret_key_123"
 
-
+# ===== 模型路径 =====
 garbage_model_file = os.path.join(BASE_DIR, "models", "garbege.pt")
 fire_model_file    = os.path.join(BASE_DIR, "models", "fire_smoke.pt")
 smoke_model_file   = os.path.join(BASE_DIR, "models", "fire_smoke.pt")
 
-
+# ===== 初始化检测器 =====
 detector = MyDetector(
     garbage_model_path=garbage_model_file,
     fire_model_path=fire_model_file,
@@ -39,7 +37,7 @@ detector = MyDetector(
     iou_threshold=0.3
 )
 
-
+# ===== 运行数据存储 =====
 alert_records = []
 
 run_stats = {
@@ -53,73 +51,14 @@ run_stats = {
 
 data_lock = threading.Lock()
 
-
-class AlertCooldown:
-
-
-    COOLDOWN_CONFIG = {
-
-        "overflow": 15 * 60,
-        "garbage":  15 * 60,
-
-        "fire":     90,
-        "smoke":    90,
-    }
-
-    def __init__(self):
-        self._last_alert_time = {}   # {category_key: timestamp}
-        self._lock = threading.Lock()
-
-    def _get_cooldown_seconds(self, class_id: int) -> int:
-
-
-        class_name = ALL_CLASSES.get(class_id, {}).get("name", "")
-        if class_name == "垃圾溢出":
-            return self.COOLDOWN_CONFIG["overflow"]
-        elif class_name == "散落垃圾":
-            return self.COOLDOWN_CONFIG["garbage"]
-        elif class_name == "火焰":
-            return self.COOLDOWN_CONFIG["fire"]
-        elif class_name == "烟雾":
-            return self.COOLDOWN_CONFIG["smoke"]
-        else:
-
-            return 15 * 60
-
-    def can_alert(self, class_id: int) -> bool:
-
-
-        cooldown = self._get_cooldown_seconds(class_id)
-
-        key = class_id
-        with self._lock:
-            now = time.time()
-            last = self._last_alert_time.get(key, 0)
-            if now - last >= cooldown:
-
-                self._last_alert_time[key] = now
-                return True
-            else:
-                remaining = int(cooldown - (now - last))
-                print(f"[冷却抑制] 类别 '{ALL_CLASSES[class_id]['name']}' 还需等待 {remaining} 秒")
-                return False
-
-    def reset_category(self, class_id: int):
-
-        with self._lock:
-            self._last_alert_time.pop(class_id, None)
-
-
-cooldown_manager = AlertCooldown()
-
+# ===== 视频任务存储（异步处理） =====
+video_tasks = {}  # task_id -> {"status": "processing"/"completed"/"failed", "progress": int, "message": str, "result": dict, "output_path": str}
+task_lock = threading.Lock()
 
 def check_ext(filename):
-
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
-
 def add_alert_record(scene_info, det_list, img_b64=None):
-
     global run_stats
     rec = {
         "id":     str(uuid.uuid4())[:8],
@@ -146,35 +85,34 @@ def add_alert_record(scene_info, det_list, img_b64=None):
         if cid in run_stats["class_nums"]:
             run_stats["class_nums"][cid] += 1
 
-
+# ===== 页面路由 =====
 @app.route("/")
 def page_index():
     return render_template("index.html")
-
 
 @app.route("/detection")
 def page_detection():
     return render_template("detection.html")
 
-
 @app.route("/alerts")
 def page_alerts():
     return render_template("alerts.html")
-
 
 @app.route("/statistics")
 def page_statistics():
     return render_template("statistics.html")
 
-
 @app.route("/dataset")
 def page_dataset():
     return render_template("dataset.html")
 
+@app.route("/video")
+def page_video():
+    return render_template("video.html")
 
+# ===== 图片检测接口（无冷却，每次都报警） =====
 @app.route("/api/detect/image", methods=["POST"])
 def api_detect_image():
-
     if "file" not in request.files:
         return jsonify({"error": "未上传文件"}), 400
 
@@ -182,38 +120,20 @@ def api_detect_image():
     if not f or not check_ext(f.filename):
         return jsonify({"error": "文件格式不支持"}), 400
 
-
     img_bytes = f.read()
     arr = np.frombuffer(img_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
         return jsonify({"error": "图片解析失败"}), 400
 
-
+    # 直接检测，无冷却
     det_list = detector.detect(img)
-
-
-    filtered_det_list = []
-    for d in det_list:
-        if d["alert"]:
-
-            if cooldown_manager.can_alert(d["class_id"]):
-                filtered_det_list.append(d)
-            else:
-
-                d_copy = d.copy()
-                d_copy["alert"] = False
-                filtered_det_list.append(d_copy)
-        else:
-            filtered_det_list.append(d)
-
-    scene_info = detector.check_scene(filtered_det_list)
-    result_img = detector.draw_boxes(img, filtered_det_list)
+    scene_info = detector.check_scene(det_list)
+    result_img = detector.draw_boxes(img, det_list)
     result_b64 = frame_to_base64(result_img)
 
-
     if scene_info["alert_count"] > 0:
-        add_alert_record(scene_info, filtered_det_list, result_b64)
+        add_alert_record(scene_info, det_list, result_b64)
 
     return jsonify({
         "success": True,
@@ -225,15 +145,13 @@ def api_detect_image():
             "alert":      d["alert"],
             "icon":       d.get("icon", ""),
             "source":     d.get("source_model", ""),
-        } for d in filtered_det_list],
+        } for d in det_list],
         "scene":        scene_info,
         "result_image": result_b64,
     })
 
-
 @app.route("/api/detect/base64", methods=["POST"])
 def api_detect_base64():
-
     req_data = request.get_json()
     if not req_data or "image" not in req_data:
         return jsonify({"error": "缺少图片数据"}), 400
@@ -252,27 +170,14 @@ def api_detect_base64():
     if img is None:
         return jsonify({"error": "图片解析失败"}), 400
 
+    # 直接检测，无冷却
     det_list = detector.detect(img)
-
-
-    filtered_det_list = []
-    for d in det_list:
-        if d["alert"]:
-            if cooldown_manager.can_alert(d["class_id"]):
-                filtered_det_list.append(d)
-            else:
-                d_copy = d.copy()
-                d_copy["alert"] = False
-                filtered_det_list.append(d_copy)
-        else:
-            filtered_det_list.append(d)
-
-    scene_info = detector.check_scene(filtered_det_list)
-    result_img = detector.draw_boxes(img, filtered_det_list)
+    scene_info = detector.check_scene(det_list)
+    result_img = detector.draw_boxes(img, det_list)
     result_b64 = frame_to_base64(result_img)
 
     if scene_info["alert_count"] > 0:
-        add_alert_record(scene_info, filtered_det_list, result_b64)
+        add_alert_record(scene_info, det_list, result_b64)
 
     return jsonify({
         "success": True,
@@ -284,17 +189,176 @@ def api_detect_base64():
             "alert":      d["alert"],
             "icon":       d.get("icon", ""),
             "source":     d.get("source_model", ""),
-        } for d in filtered_det_list],
+        } for d in det_list],
         "scene":        scene_info,
         "result_image": result_b64,
     })
 
+# ===== 视频检测异步任务 =====
+def process_video_task(task_id, input_path, output_path, skip_frames):
+    """后台处理视频，更新任务状态"""
+    try:
+        cap = cv2.VideoCapture(input_path)
+        if not cap.isOpened():
+            raise Exception("无法读取视频文件")
 
-@app.route("/video")
-def page_video():
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    return render_template("video.html")
+        if fps <= 0 or fps > 120:
+            fps = 30.0
 
+        writer = imageio.get_writer(
+            output_path,
+            fps=fps,
+            codec='libx264',
+            quality=8,
+            pixelformat='yuv420p'
+        )
+
+        # 跟踪抑制参数
+        tracked_objects = []   # (class_id, bbox, last_time)
+        alarm_history = []     # (class_id, bbox, last_time)
+        IOU_MATCH_THRESH = 0.4
+        MEMORY_DEFAULT = 3     # 垃圾类记忆秒数
+        MEMORY_FIRE = 1        # 火/烟记忆秒数
+
+        def compute_iou(box1, box2):
+            x1 = max(box1[0], box2[0])
+            y1 = max(box1[1], box2[1])
+            x2 = min(box1[2], box2[2])
+            y2 = min(box1[3], box2[3])
+            inter = max(0, x2 - x1) * max(0, y2 - y1)
+            area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+            area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+            union = area1 + area2 - inter
+            return inter / union if union > 0 else 0
+
+        frame_count = 0
+        total_detections = 0
+        total_alerts = 0
+        alert_frames = 0
+        prev_result_img = None
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_count += 1
+            current_time = frame_count / fps
+
+            # 跳帧
+            if frame_count % skip_frames != 1:
+                if prev_result_img is not None:
+                    writer.append_data(prev_result_img)
+                else:
+                    writer.append_data(frame)
+                continue
+
+            det_list = detector.detect(frame)
+
+            # 跟踪抑制
+            matched_indices = set()
+            new_alerts = []
+
+            for det in det_list:
+                best_iou = 0
+                best_idx = -1
+                for idx, obj in enumerate(tracked_objects):
+                    if obj[0] == det["class_id"]:
+                        iou = compute_iou(obj[1], det["bbox"])
+                        if iou > best_iou and iou >= IOU_MATCH_THRESH:
+                            best_iou = iou
+                            best_idx = idx
+                if best_idx >= 0:
+                    matched_indices.add(best_idx)
+                    tracked_objects[best_idx] = (det["class_id"], det["bbox"], current_time)
+                    det["alert"] = False
+                else:
+                    found = False
+                    for hist in alarm_history:
+                        if hist[0] == det["class_id"] and compute_iou(hist[1], det["bbox"]) >= IOU_MATCH_THRESH:
+                            mem_sec = MEMORY_FIRE if det["class_id"] in [3,4] else MEMORY_DEFAULT
+                            if current_time - hist[2] < mem_sec:
+                                det["alert"] = False
+                                found = True
+                                break
+                            else:
+                                alarm_history.remove(hist)
+                                break
+                    if not found:
+                        new_alerts.append(det)
+                        det["alert"] = True
+
+            new_tracked = []
+            for idx, obj in enumerate(tracked_objects):
+                if idx in matched_indices:
+                    new_tracked.append(obj)
+                else:
+                    alarm_history.append((obj[0], obj[1], current_time))
+            tracked_objects = new_tracked
+
+            for det in new_alerts:
+                tracked_objects.append((det["class_id"], det["bbox"], current_time))
+
+            alarm_history = [h for h in alarm_history if current_time - h[2] < MEMORY_DEFAULT]
+
+            result_img = detector.draw_boxes(frame, det_list)
+
+            frame_alerts = len(new_alerts)
+            if frame_alerts > 0:
+                alert_frames += 1
+                total_alerts += frame_alerts
+            total_detections += len(det_list)
+
+            info_text = f"Frame {frame_count}: {len(det_list)} detections, {frame_alerts} alerts"
+            cv2.putText(result_img, info_text, (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+            result_img_rgb = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
+            writer.append_data(result_img_rgb)
+            prev_result_img = result_img_rgb
+
+            # 更新进度
+            progress = int(frame_count / total_frames * 100) if total_frames > 0 else 0
+            with task_lock:
+                if task_id in video_tasks:
+                    video_tasks[task_id]["progress"] = progress
+                    video_tasks[task_id]["message"] = f"处理中 {progress}% ({frame_count}/{total_frames} 帧)"
+
+        writer.close()
+        cap.release()
+        os.remove(input_path)
+
+        result = {
+            "total_frames": frame_count,
+            "detected_frames": alert_frames,
+            "total_detections": total_detections,
+            "total_alerts": total_alerts,
+            "video_info": f"{width}x{height}, {fps:.1f}fps",
+            "result_video": os.path.basename(output_path)
+        }
+
+        with task_lock:
+            if task_id in video_tasks:
+                video_tasks[task_id]["status"] = "completed"
+                video_tasks[task_id]["progress"] = 100
+                video_tasks[task_id]["message"] = "处理完成"
+                video_tasks[task_id]["result"] = result
+
+    except Exception as e:
+        print(f"[视频任务 {task_id}] 错误: {e}")
+        with task_lock:
+            if task_id in video_tasks:
+                video_tasks[task_id]["status"] = "failed"
+                video_tasks[task_id]["message"] = str(e)
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
 
 @app.route("/api/detect/video", methods=["POST"])
 def api_detect_video():
@@ -319,189 +383,68 @@ def api_detect_video():
     output_filename = f"{name}_detected.mp4"
     output_path = os.path.join(UPLOAD_DIR, output_filename)
 
-    cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened():
-        os.remove(input_path)
-        return jsonify({"error": "无法读取视频文件"}), 400
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    if fps <= 0 or fps > 120:
-        fps = 30.0
-
-
-    import imageio
-
-    writer = imageio.get_writer(
-        output_path,
-        fps=fps,
-        codec='libx264',
-        quality=8,
-        pixelformat='yuv420p'
-    )
-
     skip_frames = int(request.form.get("skip_frames", 3))
 
+    task_id = str(uuid.uuid4())
+    with task_lock:
+        video_tasks[task_id] = {
+            "status": "processing",
+            "progress": 0,
+            "message": "开始处理...",
+            "result": None
+        }
 
-    tracked_objects = []
-    alarm_history = []
-    IOU_MATCH_THRESH = 0.4
-    MEMORY_SECONDS = 3
-
-    def compute_iou(box1, box2):
-        x1 = max(box1[0], box2[0])
-        y1 = max(box1[1], box2[1])
-        x2 = min(box1[2], box2[2])
-        y2 = min(box1[3], box2[3])
-        inter = max(0, x2 - x1) * max(0, y2 - y1)
-        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-        union = area1 + area2 - inter
-        return inter / union if union > 0 else 0
-
-    frame_count = 0
-    total_detections = 0
-    total_alerts = 0
-    alert_frames = 0
-    prev_result_img = None
-
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            frame_count += 1
-            current_time = frame_count / fps
-
-
-            if frame_count % skip_frames != 1:
-                if prev_result_img is not None:
-                    writer.append_data(prev_result_img)
-                else:
-                    writer.append_data(frame)
-                continue
-
-            det_list = detector.detect(frame)
-
-
-            matched_indices = set()
-            new_alerts = []
-
-            for det in det_list:
-                best_iou = 0
-                best_idx = -1
-                for idx, obj in enumerate(tracked_objects):
-                    if obj[0] == det["class_id"]:
-                        iou = compute_iou(obj[1], det["bbox"])
-                        if iou > best_iou and iou >= IOU_MATCH_THRESH:
-                            best_iou = iou
-                            best_idx = idx
-                if best_idx >= 0:
-                    matched_indices.add(best_idx)
-                    tracked_objects[best_idx] = (det["class_id"], det["bbox"], current_time)
-                    det["alert"] = False
-                else:
-                    found = False
-                    for hist in alarm_history:
-                        if hist[0] == det["class_id"] and compute_iou(hist[1], det["bbox"]) >= IOU_MATCH_THRESH:
-                            if current_time - hist[2] < MEMORY_SECONDS:
-                                det["alert"] = False
-                                found = True
-                                break
-                            else:
-                                alarm_history.remove(hist)
-                                break
-                    if not found:
-                        new_alerts.append(det)
-                        det["alert"] = True
-
-            new_tracked = []
-            for idx, obj in enumerate(tracked_objects):
-                if idx in matched_indices:
-                    new_tracked.append(obj)
-                else:
-                    alarm_history.append((obj[0], obj[1], current_time))
-            tracked_objects = new_tracked
-
-            for det in new_alerts:
-                tracked_objects.append((det["class_id"], det["bbox"], current_time))
-
-            alarm_history = [h for h in alarm_history if current_time - h[2] < MEMORY_SECONDS]
-
-            result_img = detector.draw_boxes(frame, det_list)
-
-            frame_alerts = len(new_alerts)
-            if frame_alerts > 0:
-                alert_frames += 1
-                total_alerts += frame_alerts
-            total_detections += len(det_list)
-
-            info_text = f"Frame {frame_count}: {len(det_list)} detections, {frame_alerts} alerts"
-            cv2.putText(result_img, info_text, (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-
-            result_img_rgb = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
-            writer.append_data(result_img_rgb)
-            prev_result_img = result_img_rgb
-
-        writer.close()
-        cap.release()
-        os.remove(input_path)
-        print(f"[视频检测] 完成，输出: {output_path}")
-        print(f"[统计] 总帧数: {frame_count}, 报警帧数: {alert_frames}, 总报警次数: {total_alerts}")
-
-    except Exception as e:
-        cap.release()
-        if 'writer' in locals():
-            writer.close()
-        if os.path.exists(input_path):
-            os.remove(input_path)
-        print(f"[视频检测] 错误: {e}")
-        return jsonify({"error": f"生成视频失败: {str(e)}"}), 500
+    # 启动后台线程
+    thread = threading.Thread(
+        target=process_video_task,
+        args=(task_id, input_path, output_path, skip_frames)
+    )
+    thread.daemon = True
+    thread.start()
 
     return jsonify({
         "success": True,
-        "result_video": output_filename,
-        "stats": {
-            "total_frames": frame_count,
-            "detected_frames": alert_frames,
-            "total_detections": total_detections,
-            "total_alerts": total_alerts,
-            "video_info": f"{width}x{height}, {fps:.1f}fps"
-        }
+        "task_id": task_id,
+        "message": "视频已提交，请轮询任务状态"
     })
 
+@app.route("/api/tasks/<task_id>")
+def get_task_status(task_id):
+    with task_lock:
+        task = video_tasks.get(task_id)
+        if not task:
+            return jsonify({"error": "任务不存在"}), 404
 
+        resp = {
+            "status": task["status"],
+            "progress": task["progress"],
+            "message": task["message"],
+        }
+        if task["status"] == "completed":
+            resp["result"] = task["result"]
+        return jsonify(resp)
+
+# ===== 文件访问 =====
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if not os.path.exists(filepath):
         return "文件不存在", 404
-
     if filename.endswith('.mp4'):
         mimetype = 'video/mp4'
     else:
         mimetype = 'application/octet-stream'
     response = send_from_directory(app.config['UPLOAD_FOLDER'], filename, mimetype=mimetype)
-
     response.headers['Accept-Ranges'] = 'bytes'
     response.headers['Cache-Control'] = 'no-cache'
     return response
 
-
+# ===== 记录接口 =====
 @app.route("/api/alerts")
 def api_get_alerts():
-
     page        = int(request.args.get("page", 1))
     per_page    = int(request.args.get("per_page", 20))
     status_val  = request.args.get("status", "all")
-
 
     if status_val == "all":
         filtered = alert_records
@@ -513,7 +456,6 @@ def api_get_alerts():
     total_num = len(filtered)
     start_idx = (page - 1) * per_page
     end_idx   = start_idx + per_page
-
     page_data = [{k: v for k, v in r.items() if k != "image"} for r in filtered[start_idx:end_idx]]
 
     return jsonify({
@@ -523,19 +465,15 @@ def api_get_alerts():
         "records":  page_data,
     })
 
-
 @app.route("/api/alerts/<rec_id>/image")
 def api_get_alert_image(rec_id):
-
     rec = next((r for r in alert_records if r["id"] == rec_id), None)
     if not rec or not rec.get("image"):
         return jsonify({"error": "记录不存在"}), 404
     return jsonify({"image": rec["image"]})
 
-
 @app.route("/api/statistics")
 def api_get_stats():
-
     cls_list = []
     for cid, num in run_stats["class_nums"].items():
         if num > 0:
@@ -558,10 +496,8 @@ def api_get_stats():
         "alert_record_count": len(alert_records),
     })
 
-
 @app.route("/api/classes")
 def api_get_classes():
-
     cls_list = []
     for cid, info in ALL_CLASSES.items():
         cls_list.append({
@@ -573,10 +509,8 @@ def api_get_classes():
         })
     return jsonify({"classes": cls_list, "bin_types": BIN_TYPES})
 
-
 @app.route("/api/status")
 def api_get_status():
-
     return jsonify({
         "model_loaded":   any(detector.models_loaded.values()),
         "garbage_model":  detector.models_loaded.get("garbage", False),
@@ -588,7 +522,6 @@ def api_get_status():
         "version":        "1.0",
         "name":           "垃圾分类检测系统",
     })
-
 
 if __name__ == "__main__":
     os.makedirs(UPLOAD_DIR, exist_ok=True)

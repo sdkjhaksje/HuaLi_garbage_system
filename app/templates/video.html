@@ -266,12 +266,12 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
               <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div id="progress-bar" class="progress-bar h-full rounded-full" style="width: 0%;"></div>
               </div>
-              <p class="text-xs text-gray-500 mt-2" id="progress-text">已处理 0 / 0 帧</p>
+              <p class="text-xs text-gray-500 mt-2" id="progress-text">等待开始</p>
             </div>
           </div>
         </div>
       </div>
-      
+
       <!-- Right - Stats & Results -->
       <div class="lg:col-span-1 space-y-6">
         <!-- Quick Stats -->
@@ -282,7 +282,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
             </svg>
             检测统计
           </h2>
-          
+
           <div class="space-y-4">
             <div class="flex items-center justify-between p-3 rounded-xl bg-emerald-50">
               <div class="flex items-center gap-3">
@@ -295,7 +295,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
               </div>
               <span class="font-bold text-gray-800" id="stat-frames">0</span>
             </div>
-            
+
             <div class="flex items-center justify-between p-3 rounded-xl bg-blue-50">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -308,7 +308,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
               </div>
               <span class="font-bold text-gray-800" id="stat-detected">0</span>
             </div>
-            
+
             <div class="flex items-center justify-between p-3 rounded-xl bg-red-50">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
@@ -320,7 +320,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
               </div>
               <span class="font-bold text-red-600" id="stat-alerts">0</span>
             </div>
-            
+
             <div class="flex items-center justify-between p-3 rounded-xl bg-purple-50">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -334,7 +334,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
             </div>
           </div>
         </div>
-        
+
         <!-- Detection Results -->
         <div class="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 fade-in">
           <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -343,7 +343,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
             </svg>
             检测结果
           </h2>
-          
+
           <div id="results-empty" class="text-center py-8">
             <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
               <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -353,7 +353,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
             <p class="text-gray-500">上传视频</p>
             <p class="text-gray-500">检测结果将显示在这里</p>
           </div>
-          
+
           <div id="results-list" class="space-y-3 hidden">
             <!-- Results will be inserted here -->
           </div>
@@ -367,12 +367,12 @@ body { font-family: 'Inter', -apple-system, sans-serif; }
 let selectedVideo = null;
 let isDetecting = false;
 let startTime = null;
+let currentTaskId = null;
+let pollInterval = null;
 
 function handleVideoSelect(event) {
   const file = event.target.files[0];
-  if (!file) {
-    return;
-  }
+  if (!file) return;
 
   selectedVideo = file;
 
@@ -390,9 +390,7 @@ function handleVideoSelect(event) {
 }
 
 function removeVideo() {
-  if (isDetecting) {
-    stopDetection();
-  }
+  if (isDetecting) stopDetection();
 
   selectedVideo = null;
   document.getElementById('video-input').value = '';
@@ -418,9 +416,7 @@ async function startDetection() {
     alert('请先选择视频文件');
     return;
   }
-  if (isDetecting) {
-    return;
-  }
+  if (isDetecting) return;
 
   isDetecting = true;
   startTime = Date.now();
@@ -433,86 +429,82 @@ async function startDetection() {
   document.getElementById('results-list').classList.remove('hidden');
   document.getElementById('results-list').innerHTML = '';
 
-  const video = document.getElementById('video-player');
-  if (video.src) {
-    video.play().catch(() => {});
-  }
-
   const formData = new FormData();
   formData.append('file', selectedVideo);
   formData.append('skip_frames', '3');
 
   try {
-    const submitResp = await fetch('/api/detect/video', {
+    const response = await fetch('/api/detect/video', {
       method: 'POST',
       body: formData
     });
-
-    const submitData = await submitResp.json().catch(() => ({}));
-    if (!submitResp.ok || !submitData.success || !submitData.task_id) {
-      throw new Error(submitData.error || submitData.message || '视频任务提交失败');
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '提交失败');
     }
-
-    await pollTaskStatus(submitData.task_id);
+    currentTaskId = data.task_id;
+    pollTaskStatus();
   } catch (error) {
-    console.error('视频检测失败:', error);
+    console.error('提交视频失败:', error);
     addResult({
       class_id: 'warning',
-      class_name: `任务失败: ${error.message || '未知错误'}`,
+      class_name: `提交失败: ${error.message}`,
       confidence: 1,
       is_alert: true,
       frame: '-'
     });
-    alert(`视频检测失败: ${error.message || '未知错误'}`);
+    alert(`提交失败: ${error.message}`);
     finalizeDetectionUi();
   }
 }
 
-async function pollTaskStatus(taskId) {
-  while (isDetecting) {
-    const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
-    const result = await response.json().catch(() => ({}));
+function pollTaskStatus() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    if (!currentTaskId) return;
+    try {
+      const resp = await fetch(`/api/tasks/${currentTaskId}`);
+      const task = await resp.json();
+      if (!resp.ok) throw new Error(task.error);
 
-    if (!response.ok) {
-      throw new Error(result.error || result.message || '任务状态查询失败');
+      // 更新进度
+      document.getElementById('progress-percent').textContent = `${task.progress}%`;
+      document.getElementById('progress-bar').style.width = `${task.progress}%`;
+      document.getElementById('progress-text').textContent = task.message;
+      document.getElementById('processing-text').textContent = task.message;
+
+      if (task.status === 'completed') {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        applyCompletedResult(task.result);
+        finalizeDetectionUi(true);
+      } else if (task.status === 'failed') {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        throw new Error(task.message);
+      }
+    } catch (error) {
+      console.error('轮询失败:', error);
+      clearInterval(pollInterval);
+      pollInterval = null;
+      addResult({
+        class_id: 'warning',
+        class_name: `处理失败: ${error.message}`,
+        confidence: 1,
+        is_alert: true,
+        frame: '-'
+      });
+      alert(`处理失败: ${error.message}`);
+      finalizeDetectionUi();
     }
-
-    const progress = Math.max(0, Math.min(100, Number(result.progress || 0)));
-    document.getElementById('progress-percent').textContent = `${progress}%`;
-    document.getElementById('progress-bar').style.width = `${progress}%`;
-    document.getElementById('progress-text').textContent = result.message || `处理中 ${progress}%`;
-    document.getElementById('processing-text').textContent = result.message || '处理中...';
-
-    if (startTime) {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      document.getElementById('stat-duration').textContent = `${elapsed}s`;
-    }
-
-    if (result.status === 'completed') {
-      applyCompletedResult(result);
-      finalizeDetectionUi(true);
-      return;
-    }
-
-    if (result.status === 'failed') {
-      throw new Error(result.message || '视频处理失败');
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-  }
+  }, 1500);
 }
 
 function applyCompletedResult(result) {
   const stats = result.stats || {};
-
-  document.getElementById('stat-frames').textContent = String(stats.total_frames || 0);
-  document.getElementById('stat-detected').textContent = String(stats.total_detections || 0);
-  document.getElementById('stat-alerts').textContent = String(stats.total_alerts || 0);
-
-  document.getElementById('progress-percent').textContent = '100%';
-  document.getElementById('progress-bar').style.width = '100%';
-  document.getElementById('progress-text').textContent = '处理完成';
-  document.getElementById('processing-text').textContent = '处理完成';
+  document.getElementById('stat-frames').textContent = stats.total_frames || 0;
+  document.getElementById('stat-detected').textContent = stats.total_detections || 0;
+  document.getElementById('stat-alerts').textContent = stats.total_alerts || 0;
 
   if (result.result_video) {
     const videoUrl = `/uploads/${result.result_video}`;
@@ -520,38 +512,38 @@ function applyCompletedResult(result) {
     videoPlayer.src = videoUrl;
     videoPlayer.classList.remove('hidden');
     document.getElementById('video-placeholder').classList.add('hidden');
-
-    addResult({
-      class_id: stats.total_alerts > 0 ? 'warning' : 'normal',
-      class_name: stats.total_alerts > 0 ? '检测到异常，请查看回放' : '检测完成，未发现异常',
-      confidence: 1,
-      is_alert: stats.total_alerts > 0,
-      frame: `${stats.total_frames || 0}`
-    });
   }
+
+  addResult({
+    class_id: stats.total_alerts > 0 ? 'warning' : 'normal',
+    class_name: stats.total_alerts > 0 ? '检测到异常，请查看回放' : '检测完成，未发现异常',
+    confidence: 1,
+    is_alert: stats.total_alerts > 0,
+    frame: `${stats.total_frames || 0}`
+  });
 }
 
 function stopDetection() {
-  if (!isDetecting) {
-    return;
-  }
-
+  if (!isDetecting) return;
   isDetecting = false;
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = null;
   finalizeDetectionUi();
-  document.getElementById('processing-text').textContent = '已停止前端轮询，后台任务可能仍在继续';
+  document.getElementById('processing-text').textContent = '已停止检测';
 }
 
 function finalizeDetectionUi(completed = false) {
   isDetecting = false;
-
-  const video = document.getElementById('video-player');
-  if (!completed) {
-    video.pause();
-  }
+  currentTaskId = null;
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = null;
 
   document.getElementById('btn-start').classList.remove('hidden');
   document.getElementById('btn-stop').classList.add('hidden');
   document.getElementById('video-processing').classList.add('hidden');
+  if (!completed) {
+    document.getElementById('progress-section').classList.add('hidden');
+  }
 }
 
 function resetStats() {
@@ -561,13 +553,17 @@ function resetStats() {
   document.getElementById('stat-duration').textContent = '0s';
   document.getElementById('progress-percent').textContent = '0%';
   document.getElementById('progress-bar').style.width = '0%';
-  document.getElementById('progress-text').textContent = '已处理 0 / 0 帧';
+  document.getElementById('progress-text').textContent = '等待开始';
   document.getElementById('results-list').innerHTML = '';
+  document.getElementById('results-empty').classList.remove('hidden');
+  document.getElementById('results-list').classList.add('hidden');
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = null;
+  currentTaskId = null;
 }
 
 function addResult(result) {
   const list = document.getElementById('results-list');
-
   const typeConfig = {
     garbage_bin: { icon: '🗑️', color: 'emerald' },
     overflow: { icon: '⚠️', color: 'amber' },
@@ -577,11 +573,9 @@ function addResult(result) {
     warning: { icon: '⚠️', color: 'red' },
     normal: { icon: '✅', color: 'emerald' }
   };
-
   const config = typeConfig[result.class_id] || { icon: '📌', color: 'gray' };
   const isWarning = Boolean(result.is_alert);
   const confidenceText = `${((result.confidence || 0) * 100).toFixed(1)}%`;
-
   const html = `
     <div class="result-item p-3 rounded-xl ${isWarning ? 'bg-red-50 border border-red-100' : 'bg-emerald-50 border border-emerald-100'}">
       <div class="flex items-center gap-3">
@@ -596,11 +590,10 @@ function addResult(result) {
       </div>
     </div>
   `;
-
   list.insertAdjacentHTML('afterbegin', html);
-  while (list.children.length > 20) {
-    list.removeChild(list.lastChild);
-  }
+  while (list.children.length > 20) list.removeChild(list.lastChild);
+  document.getElementById('results-empty').classList.add('hidden');
+  document.getElementById('results-list').classList.remove('hidden');
 }
 
 const uploadZone = document.getElementById('upload-zone');
