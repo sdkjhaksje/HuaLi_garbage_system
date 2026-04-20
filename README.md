@@ -97,22 +97,21 @@
 ```text
 garbage_system/
 ├── app/
-│   ├── api/                # 页面路由与接口路由
-│   ├── models/             # 模型权重与 ONNX 文件
+│   ├── api/                # 页面路由与 API 路由
+│   ├── models/             # 模型权重与导出的 ONNX 文件
 │   ├── services/           # 检测、视频、记录服务
-│   ├── templates/          # Jinja2 页面模板
-│   ├── upgrade/            # 跟踪与时序告警流水线
+│   ├── templates/          # Jinja2 前端页面
+│   ├── upgrade/            # 跟踪与时序告警升级流水线
 │   ├── bootstrap.py        # 启动初始化
-│   ├── celery_app.py       # Celery 配置
+│   ├── celery_app.py       # Celery 应用
 │   ├── config.py           # 项目配置
 │   ├── constants.py        # 类别常量
 │   ├── database.py         # 数据库连接
 │   ├── db_models.py        # ORM 模型
 │   ├── main.py             # FastAPI 入口
-│   ├── schemas.py          # Pydantic 数据模型
-│   └── tasks.py            # 异步视频任务
-├── dataset/                # 数据集目录
-├── garbage_system.db       # SQLite 数据库
+│   ├── schemas.py          # Pydantic 响应模型
+│   └── tasks.py            # 视频异步任务
+├── dataset/                # 当前仓库内保留的数据集目录
 ├── start_queue.bat         # Windows 一键启动脚本
 ├── requirements.txt
 └── README.md
