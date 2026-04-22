@@ -350,6 +350,7 @@ RUST_SERVICE_URL=http://127.0.0.1:50051 uvicorn app.main:app --host 127.0.0.1 --
 RUST_SERVICE_URL=http://127.0.0.1:50051 python -m celery -A app.celery_app worker --loglevel=info --pool=solo
 ```
 
+
 > 说明：视频任务优先通过 Celery 分发。本地无可用 Worker 时，系统自动回退到本地线程执行，兼顾演示易用性与正式链路扩展性。
 
 ---

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 import logging
 import time
 from pathlib import Path
@@ -195,7 +195,7 @@ class VideoProcessingService:
         current_ts: float,
         alert_history: list[dict],
     ) -> list[dict]:
-        """Pure-Python fallback — original O(n × history) implementation."""
+        """Pure-Python fallback — original O(n x history) implementation."""
         updated = []
 
         for det in detections:

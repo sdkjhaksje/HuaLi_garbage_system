@@ -57,7 +57,7 @@ class RustBridge:
         if self._use_pyo3:
             logger.info("rust bridge mode=pyo3 (in-process)")
         else:
-            logger.warning("rust bridge fallback=http base_url=%s", self.base_url)
+            logger.info("rust bridge mode=http base_url=%s", self.base_url)
 
     # ------------------------------------------------------------------
     #  Public helpers
@@ -86,8 +86,6 @@ class RustBridge:
         started_at = time.perf_counter()
         try:
             result = _rust_native.filter_overlapping_boxes_py(boxes, threshold)
-            if not isinstance(result, list):
-                raise TypeError(f"unexpected pyo3 result type: {type(result)!r}")
             duration_ms = (time.perf_counter() - started_at) * 1000
             logger.info(
                 "rust pyo3 filter_boxes completed boxes=%d kept=%d duration_ms=%.2f",
@@ -133,19 +131,11 @@ class RustBridge:
     ) -> list[dict] | None:
         started_at = time.perf_counter()
         try:
-            # Convert dicts → tuples accepted by PyO3 (class_id, bbox, timestamp_ms)
-            try:
-                native_events = [
-                    (e["class_id"], e["bbox"], e["timestamp_ms"])
-                    for e in events
-                ]
-            except KeyError as e:
-                logger.error("Missing required field in event data: %s", str(e))
-                return None
-
+            native_events = [
+                (e["class_id"], e["bbox"], e["timestamp_ms"])
+                for e in events
+            ]
             result = _rust_native.dedupe_track_events_py(native_events, cooldown_ms, iou_threshold)
-            if not isinstance(result, list):
-                raise TypeError(f"unexpected pyo3 result type: {type(result)!r}")
             duration_ms = (time.perf_counter() - started_at) * 1000
             logger.info(
                 "rust pyo3 dedupe_events completed events=%d kept=%d duration_ms=%.2f",

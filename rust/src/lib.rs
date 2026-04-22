@@ -93,13 +93,6 @@ mod py_api {
 
     fn py_to_bbox(obj: &Bound<'_, PyAny>) -> PyResult<BBox> {
         if let Ok(seq) = obj.downcast::<PySequence>() {
-            let len = seq.len()?;
-            if len != 4 {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "bbox sequence must contain exactly 4 items, got {}",
-                    len
-                )));
-            }
             let x1: i32 = seq.get_item(0)?.extract()?;
             let y1: i32 = seq.get_item(1)?.extract()?;
             let x2: i32 = seq.get_item(2)?.extract()?;
