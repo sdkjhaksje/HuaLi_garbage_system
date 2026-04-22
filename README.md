@@ -1,116 +1,166 @@
 # HuaLi_garbage_system
 
-> 本项目为大学生计算机设计大赛参赛项目，面向智慧校园与智慧社区场景，构建了一个集目标检测、视频异步处理、告警留存与统计分析于一体的智能巡检系统。项目目前采用 `FastAPI + Celery + SQLite + YOLO/ONNX` 架构，并提供 Windows 一键启动脚本 `start_queue.bat`。
+> 本项目为中国大学生计算机设计大赛作品，聚焦社区场景下的垃圾治理与火情风险预警，构建了一套集图像识别、视频分析、告警留存、统计展示于一体的智能巡检系统。
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Uvicorn](https://img.shields.io/badge/Uvicorn-ASGI-4051B5)](https://www.uvicorn.org/)
-[![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063)](https://docs.pydantic.dev/)
-[![Jinja2](https://img.shields.io/badge/Jinja2-Templates-B41717)](https://jinja.palletsprojects.com/)
-[![Celery](https://img.shields.io/badge/Celery-5.4%2B-37814A?logo=celery)](https://docs.celeryq.dev/)
-[![Redis](https://img.shields.io/badge/Redis-5.2%2B-DC382D?logo=redis)](https://redis.io/)
-[![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite)](https://www.sqlite.org/)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy)](https://www.sqlalchemy.org/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B-5C3EE8?logo=opencv)](https://opencv.org/)
-[![NumPy](https://img.shields.io/badge/NumPy-Array-013243?logo=numpy)](https://numpy.org/)
-[![Ultralytics](https://img.shields.io/badge/Ultralytics-YOLO-FF9F00)](https://github.com/ultralytics/ultralytics)
-[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-1.20%2B-grey?logo=onnx)](https://onnxruntime.ai/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Uvicorn-ASGI-4051B5" alt="Uvicorn">
+  <img src="https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white" alt="Pydantic">
+  <img src="https://img.shields.io/badge/Jinja2-Templates-B41717?logo=jinja&logoColor=white" alt="Jinja2">
+  <img src="https://img.shields.io/badge/TailwindCSS-CDN-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/Celery-5.4%2B-37814A?logo=celery&logoColor=white" alt="Celery">
+  <img src="https://img.shields.io/badge/Redis-5.2%2B-DC382D?logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy&logoColor=white" alt="SQLAlchemy">
+  <img src="https://img.shields.io/badge/OpenCV-4.8%2B-5C3EE8?logo=opencv&logoColor=white" alt="OpenCV">
+  <img src="https://img.shields.io/badge/NumPy-Array-013243?logo=numpy&logoColor=white" alt="NumPy">
+  <img src="https://img.shields.io/badge/Pillow-Image-8C52FF" alt="Pillow">
+  <img src="https://img.shields.io/badge/ImageIO-Video-4B5563" alt="ImageIO">
+  <img src="https://img.shields.io/badge/ONNX_Runtime-1.20%2B-005CED?logo=onnx&logoColor=white" alt="ONNX Runtime">
+  <img src="https://img.shields.io/badge/Ultralytics-YOLO-FF9F00" alt="Ultralytics">
+  <img src="https://img.shields.io/badge/PyTorch-2.4%2B-EE4C2C?logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/TorchVision-0.19%2B-EE4C2C" alt="TorchVision">
+  <img src="https://img.shields.io/badge/License-MIT-F7DF1E" alt="MIT">
+</p>
 
-## 项目概览
+## 项目简介
 
-这是一个面向智慧校园与社区场景的智能巡检系统，当前仓库已经具备下面这些核心能力：
+社区垃圾与火情识别预警系统面向智慧社区、园区巡检与安全治理场景，围绕“发现问题、生成预警、留存记录、辅助管理”这一闭环展开设计。项目通过 FastAPI 提供统一 Web 页面与接口服务，结合 YOLO / ONNX 推理能力，对上传图片、摄像头图像和视频内容进行识别分析，并将预警结果沉淀到本地数据库中，便于后续查询、统计与展示。
 
-- 图片上传检测
-- Base64 图像检测
-- 视频异步检测与结果视频回放
-- 告警记录落库、截图留存、统计分析
-- ONNX Runtime 优先推理，失败时回退到 Ultralytics `.pt`
-- Celery + Redis 视频任务队列；如果没有可用 worker，会自动回退到本地线程处理
-- FastAPI 页面路由与接口统一管理
+系统当前已经形成从前端页面、后端接口、异步视频处理到记录分析的完整链路，适合课程设计、竞赛展示、功能拓展与本地部署演示。
 
-当前主入口是 [app/main.py](app/main.py)。仓库里仍保留了历史 Flask 原型 [app/app.py](app/app.py)，但它已经不是当前推荐入口。
+## 系统亮点
 
-## 当前仓库状态
+- 多入口检测：支持图片上传检测、Base64 图像检测、视频上传检测。
+- 风险场景覆盖：围绕社区垃圾桶、满溢、散落垃圾、火情等巡检场景构建识别能力。
+- 双后端推理：优先使用 ONNX Runtime，必要时自动回退到 Ultralytics 权重推理。
+- 视频任务编排：支持 Celery 异步处理，也支持在本地线程中自动兜底执行。
+- 结果可追踪：预警截图、检测记录、视频任务状态均可落库保存。
+- 可视化展示：内置首页、综合检测页、视频页、预警页、统计页、数据集说明页。
+- 升级流水线：视频链路集成检测、跟踪、时序告警的升级版处理流程，可为结果附加 `track_id` 和时序告警信息。
 
-- Web 主线：`FastAPI`
-- 异步任务：`Celery`
-- 数据库：`SQLite`
-- 页面：`Jinja2` 模板
-- 模型推理：`ONNX Runtime` / `Ultralytics`
-- 启动脚本：`start_queue.bat`
+## 技术架构
 
-还有两点需要特别说明：
+### 后端与服务
 
-1. `package.json` 里只保留了 `docx` 依赖，当前 Web 页面并不是 Node.js 构建产物，主运行链路不依赖前端构建工具。
-2. 仓库里保留了烟雾相关模型、数据集和模板展示资源，但当前 FastAPI 主检测链路在 [app/services/detection_service.py](app/services/detection_service.py) 中实际接入的是“垃圾相关模型”和“火焰模型”。
+- `FastAPI`：Web 框架与 API 组织
+- `Uvicorn`：ASGI 服务启动
+- `Pydantic v2`：请求与响应模型校验
+- `SQLAlchemy`：SQLite ORM 持久化
+- `Celery + Redis`：视频异步任务调度
 
-## 功能对应代码
+### 媒体处理
 
-### Web 与 API
+- `OpenCV`：图像解码、绘框与视频帧处理
+- `NumPy`：张量与数组运算
+- `ONNX Runtime`：ONNX 模型推理
+- `Ultralytics YOLO`：`.pt` 权重加载与推理
+- `PyTorch / TorchVision`：YOLO 运行依赖
+- `Pillow`：图像处理基础依赖
+- `ImageIO / imageio-ffmpeg`：视频写出与编码支持
 
-- [app/main.py](app/main.py): FastAPI 应用入口
-- [app/api/pages.py](app/api/pages.py): 页面路由
-- [app/api/routes.py](app/api/routes.py): 检测、任务、告警、统计接口
-- [app/templates/index.html](app/templates/index.html): 首页
-- [app/templates/detection.html](app/templates/detection.html): 检测页
-- [app/templates/video.html](app/templates/video.html): 视频检测页
-- [app/templates/alerts.html](app/templates/alerts.html): 告警页
-- [app/templates/statistics.html](app/templates/statistics.html): 统计页
-- [app/templates/dataset.html](app/templates/dataset.html): 数据集展示页
+### 前端展示
 
-### 推理与视频处理
+- `Jinja2`：模板渲染
+- `Tailwind CSS CDN`：页面样式系统
+- 原生 `JavaScript`：前端交互、上传、轮询、结果渲染
 
-- [app/services/inference.py](app/services/inference.py): ONNX / Ultralytics 双后端
-- [app/services/detection_service.py](app/services/detection_service.py): 检测主逻辑、场景分析、绘框
-- [app/services/video_service.py](app/services/video_service.py): 视频逐帧处理、视频内告警去重
-- [app/tasks.py](app/tasks.py): Celery 视频任务
+## 功能概览
 
-### 数据落库与状态记录
+### 检测能力
 
-- [app/database.py](app/database.py): 数据库引擎与会话
-- [app/db_models.py](app/db_models.py): 告警记录、检测明细、视频任务表
-- [app/services/record_service.py](app/services/record_service.py): 告警与任务记录写入/查询
-- [app/bootstrap.py](app/bootstrap.py): 启动时建表与目录初始化
+- `POST /api/detect/image`：图片上传检测
+- `POST /api/detect/base64`：摄像头或前端抓拍图像检测
+- `POST /api/detect/video`：视频检测任务提交
+- `GET /api/tasks/{task_id}`：视频任务状态轮询
 
-### 训练与数据处理脚本
+### 数据能力
 
-- [train_garbage.py](train_garbage.py): 垃圾检测训练脚本
-- [train_yolo.py](train_yolo.py): 垃圾检测训练脚本，包含部分绝对路径
-- [train_fire_smoke.py](train_fire_smoke.py): 火焰/烟雾训练脚本，包含 Linux 风格绝对路径
-- [export_onnx.py](export_onnx.py): 权重导出 ONNX
-- [convert_coco.py](convert_coco.py), [convert_coco2yolo_separate.py](convert_coco2yolo_separate.py): COCO 转 YOLO
-- [merge_datasets.py](merge_datasets.py), [create_smoke_dataset.py](create_smoke_dataset.py): 数据集整理
-- [analyze_dataset.py](analyze_dataset.py): 数据集标注统计
-- [detect_video.py](detect_video.py), [detect_fire_smoke.py](detect_fire_smoke.py): 历史/独立测试脚本
+- 预警记录保存与分页查询
+- 检测结果截图保存与回显
+- 任务进度、结果视频、统计数据统一管理
+- 启动后自动建表与初始化上传目录
 
-## 项目结构
+### 页面能力
+
+- `/`：首页总览
+- `/detection`：综合检测页
+- `/video`：独立视频检测页
+- `/alerts`：预警记录页
+- `/statistics`：数据统计页
+- `/dataset`：数据集说明页
+- `/docs`：FastAPI 在线接口文档
+
+## 主要代码结构
 
 ```text
 garbage_system/
-├─ app/
-│  ├─ api/                 # 页面与接口路由
-│  ├─ models/              # 推理权重与 ONNX 文件
-│  ├─ services/            # 检测、视频、记录服务
-│  ├─ templates/           # Jinja2 页面模板
-│  ├─ uploads/             # 告警截图、视频输出
-│  ├─ bootstrap.py         # 启动初始化
-│  ├─ celery_app.py        # Celery 应用
-│  ├─ config.py            # 配置
-│  ├─ database.py          # 数据库连接
-│  ├─ db_models.py         # ORM 模型
-│  └─ main.py              # FastAPI 入口
-├─ dataset/                # 垃圾相关数据集
-├─ dataset_fire/           # 火焰数据集
-├─ dataset_smoke_5images_new/  # 烟雾样例数据集
-├─ runs/                   # 训练/检测输出
-├─ start_queue.bat         # Windows 一键启动脚本
-├─ requirements.txt
-├─ garbage_system.db
-└─ README.md
+├── app/
+│   ├── api/                # 页面路由与 API 路由
+│   ├── models/             # 模型权重与导出的 ONNX 文件
+│   ├── services/           # 检测、视频、记录服务
+│   ├── templates/          # Jinja2 前端页面
+│   ├── upgrade/            # 跟踪与时序告警升级流水线
+│   ├── bootstrap.py        # 启动初始化
+│   ├── celery_app.py       # Celery 应用
+│   ├── config.py           # 项目配置
+│   ├── constants.py        # 类别常量
+│   ├── database.py         # 数据库连接
+│   ├── db_models.py        # ORM 模型
+│   ├── main.py             # FastAPI 入口
+│   ├── schemas.py          # Pydantic 响应模型
+│   └── tasks.py            # 视频异步任务
+├── dataset/                # 当前仓库内保留的数据集目录
+├── start_queue.bat         # Windows 一键启动脚本
+├── requirements.txt
+└── README.md
 ```
 
-## 安装依赖
+## 核心模块说明
+
+### Web 与接口
+
+- `app/main.py`：FastAPI 应用入口
+- `app/api/pages.py`：页面路由注册
+- `app/api/routes.py`：检测、预警、统计、任务相关接口
+
+### 检测与视频处理
+
+- `app/services/inference.py`：封装 ONNX Runtime 与 Ultralytics 双推理后端
+- `app/services/detection_service.py`：检测主逻辑、场景分析、绘框渲染
+- `app/services/video_service.py`：逐帧处理、告警冷却、视频统计
+- `app/tasks.py`：视频任务异步执行封装
+
+### 数据与统计
+
+- `app/database.py`：数据库引擎与会话管理
+- `app/db_models.py`：预警记录、检测记录、视频任务模型
+- `app/services/record_service.py`：记录写入、查询与统计构建
+- `app/bootstrap.py`：启动时自动建表、创建上传目录
+
+### 升级版时序处理
+
+- `app/upgrade/pipeline.py`：检测、跟踪、时序告警组合流程
+- `app/upgrade/tracker.py`：目标跟踪占位实现
+- `app/upgrade/alarm.py`：连续帧告警规则
+- `app/upgrade/detection.py`：检测结果适配器
+
+## 模型与推理策略
+
+项目配置以 `app/config.py` 为准，当前主流程采用多模型组合方式工作：
+
+- 垃圾相关模型：`app/models/garbege.onnx` / `app/models/garbege.pt`
+- 火情相关模型：`app/models/only_fire.onnx` / `app/models/only_fire.pt`
+- 其余模型资源与数据展示内容保留在仓库中，便于后续扩展、展示与实验
+
+推理策略如下：
+
+1. 优先尝试 ONNX Runtime 加载模型。
+2. 若 ONNX 不可用，则回退到 Ultralytics `.pt` 权重。
+3. 若运行环境中没有可用模型，也保留演示模式能力，便于前端页面联调与功能展示。
+
+## 安装与运行
 
 ### 1. 克隆项目
 
@@ -119,38 +169,30 @@ git clone https://github.com/Nyzeep/HuaLi_garbage_system.git
 cd HuaLi_garbage_system
 ```
 
-### 2. 手动创建虚拟环境
-
-如果你准备手动启动项目，推荐这样创建虚拟环境：
+### 2. 创建虚拟环境
 
 ```bash
 python -m venv .venv
 ```
 
-如果你已经有自己的虚拟环境目录名，也可以继续沿用，`start_queue.bat` 会自动尝试检测项目根目录下可用的虚拟环境。
-
-### 3. 激活虚拟环境
-
-Windows:
+Windows 激活方式：
 
 ```bash
 .venv\Scripts\activate
 ```
 
-### 4. 安装 Python 依赖
+### 3. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 可选环境变量
+## 环境变量示例
 
-项目会自动读取根目录 `.env`。没有 `.env` 时也能按默认配置启动。
-
-示例：
+项目默认会读取根目录 `.env` 文件，没有 `.env` 时也可按默认配置直接运行。
 
 ```env
-APP_NAME=Garbage Detection System
+APP_NAME=社区垃圾与火情识别预警系统
 APP_VERSION=2.0.0
 DEBUG=false
 DATABASE_URL=sqlite:///garbage_system.db
@@ -159,79 +201,41 @@ VIDEO_DEFAULT_SKIP_FRAMES=1
 CELERY_TASK_ALWAYS_EAGER=false
 ```
 
-## 模型加载规则
-
-当前主应用以 [app/config.py](app/config.py) 为准，自动加载优先级如下：
-
-- 垃圾模型：`app/models/garbege.onnx`，找不到时回退到 `app/models/garbege.pt`
-- 火焰模型：`app/models/only_fire.onnx`，找不到时回退到 `app/models/only_fire.pt`
-
-仓库里虽然还存在这些模型文件：
-
-- `app/models/fire_smoke.onnx`
-- `app/models/fire_smoke.pt`
-- `app/models/smoke_yolov8.pt`
-
-但它们目前没有接入 FastAPI 主检测链路。
-
-另外，`garbege` 这个文件名是历史命名，当前代码就是按这个名字读取的，不要直接重命名，除非同时修改配置。
-
 ## 启动方式
 
-### 方式一：使用 `start_queue.bat`
-
-适合 Windows 本机开发与演示。
+### 方式一：Windows 一键启动
 
 ```bat
 start_queue.bat
 ```
 
-这个脚本会按下面的流程自动处理：
+脚本会自动完成以下流程：
 
-1. 检测当前激活的虚拟环境，或扫描项目根目录下是否存在可用虚拟环境
-2. 如果没有找到可用虚拟环境，则自动创建 `.venv`
-3. 如果检测到依赖缺失，则自动执行 `pip install -r requirements.txt`
-4. 新开一个窗口启动 Celery Worker
-5. 新开一个窗口启动 FastAPI，并自动打开浏览器
-
-脚本里实际执行的核心命令是：
-
-```bash
-python -m celery -A app.celery_app worker --loglevel=info --pool=solo
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-脚本当前不再强依赖 Redis 服务是否已安装或已启动；即使没有 Redis，项目中的视频任务也会在检测不到可用队列时自动回退到本地线程处理。
-
-提示：Redis 不是项目运行的必要条件，但推荐在正式部署时配合 Celery 一起使用。这样视频任务可以通过 `Celery + Redis` 异步队列更稳定地执行；若未检测到可用 worker，系统会自动回退到本地线程处理模式。
+1. 检查当前环境或项目目录下可用的虚拟环境
+2. 自动创建 `.venv`（如不存在）
+3. 自动安装缺失依赖
+4. 启动 Celery Worker
+5. 启动 FastAPI Web 服务并打开浏览器
 
 ### 方式二：手动启动
 
-先启动 Web：
+启动 Web：
 
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-再在另一个终端启动 Celery Worker：
+如需启用异步队列，再启动 Worker：
 
 ```bash
 python -m celery -A app.celery_app worker --loglevel=info --pool=solo
 ```
 
-如果不启动 Celery Worker，视频任务仍然可以运行；[app/api/routes.py](app/api/routes.py) 会检测不到 worker 时自动回退到本地线程处理。这样适合轻量测试，但不适合长期高并发。
+说明：
 
-## 页面入口
-
-服务启动后可访问：
-
-- `http://127.0.0.1:8000/`: 首页，用于查看项目简介、能力概览和快速导航
-- `http://127.0.0.1:8000/detection`: 检测页，用于上传图片或提交图像数据进行识别
-- `http://127.0.0.1:8000/video`: 视频检测页，用于上传视频、提交异步任务并查看处理结果
-- `http://127.0.0.1:8000/alerts`: 告警页，用于查看历史告警记录和告警截图
-- `http://127.0.0.1:8000/statistics`: 统计页，用于查看检测数量、告警数量和类别统计
-- `http://127.0.0.1:8000/dataset`: 数据集展示页，用于展示项目涉及的数据集与类别信息
-- `http://127.0.0.1:8000/docs`: FastAPI 接口文档页，用于接口调试和开发联调
+- 视频任务优先通过 Celery 分发执行。
+- 当本地没有可用 worker 时，系统仍可自动回退到本地线程完成视频处理。
+- 这种设计兼顾了演示环境的易用性与正式链路的扩展性。
 
 ## 常用接口
 
@@ -243,7 +247,7 @@ POST /api/detect/image
 
 表单字段：
 
-- `file`: 图片文件
+- `file`：图片文件
 
 ### Base64 图像检测
 
@@ -267,16 +271,16 @@ POST /api/detect/video
 
 表单字段：
 
-- `file`: 视频文件
-- `skip_frames`: 跳帧数，当前默认值为 `1`
+- `file`：视频文件
+- `skip_frames`：跳帧数，默认读取 `VIDEO_DEFAULT_SKIP_FRAMES`
 
-查询任务状态：
+任务查询：
 
 ```http
 GET /api/tasks/{task_id}
 ```
 
-### 告警与统计
+### 记录与状态
 
 ```http
 GET /api/alerts
@@ -286,68 +290,35 @@ GET /api/status
 GET /api/classes
 ```
 
-## 数据存储位置
+## 数据存储
 
 - SQLite 数据库：`garbage_system.db`
-- 告警截图：`app/uploads/alerts/`
-- 视频上传与结果视频：`app/uploads/videos/`
-- 上传静态访问前缀：`/uploads/...`
+- 预警截图目录：`app/uploads/alerts/`
+- 视频上传与结果目录：`app/uploads/videos/`
+- 静态访问路径前缀：`/uploads/...`
 
-[app/bootstrap.py](app/bootstrap.py) 会在启动时自动创建数据库表和上传目录。
+## 页面展示
 
-## 当前检测逻辑说明
+系统默认提供统一的竞赛展示风格页面：
 
-主应用里定义的类别常量仍然包含 5 类：
+- 首页：能力概览与功能入口
+- 综合检测页：图片、摄像头、视频统一检测入口
+- 视频页：独立视频处理与进度轮询
+- 预警页：历史记录、状态筛选与图片查看
+- 统计页：检测量、预警量、类别分布
+- 数据集页：类别说明、模型信息与数据展示
 
-- 垃圾桶
-- 垃圾满溢
-- 散落垃圾
-- 火焰
-- 烟雾
+## 适用场景
 
-但当前 FastAPI 主检测链路的实际接入状态是：
-
-- 已接入：垃圾相关检测、火焰检测
-- 未接入主链路：烟雾检测
-
-如果你后续准备继续完善烟雾检测，需要优先检查：
-
-- [app/services/detection_service.py](app/services/detection_service.py)
-- [app/config.py](app/config.py)
-- [app/services/inference.py](app/services/inference.py)
-
-## 训练与导出
-
-常用脚本如下：
-
-```bash
-python train_garbage.py --mode train
-python train_garbage.py --mode val
-python train_yolo.py --mode train
-python train_fire_smoke.py
-python export_onnx.py
-```
-
-需要注意：
-
-- `train_yolo.py` 中存在 `D:/garbage_system/...` 形式的绝对路径
-- `train_fire_smoke.py` 中存在 `/root/workspace/...` 形式的绝对路径
-- 一些数据处理脚本中也写入了本机路径或下载目录
-- `export_onnx.py` 会导出若干历史模型对，但主应用实际自动加载的文件名仍然以 [app/config.py](app/config.py) 为准
-
-因此，这些训练和数据脚本在换机器前通常都需要先改路径。
-
-## 已知注意事项
-
-- `app/app.py` 是旧版 Flask 原型，不建议作为主入口继续维护
-- `requirements.txt` 中仍保留了 Flask 相关依赖，这是为了兼容历史文件
-- 当前视频任务优先走 Celery，检测不到 worker 时自动回退到本地线程
-- README 已根据项目现阶段实现重新整理，重点覆盖现在可直接运行和复现的功能链路
+- 中国大学生计算机设计大赛项目展示
+- 智慧社区巡检与风险识别演示
+- 课程设计与毕业设计原型系统
+- 目标检测、视频任务处理、可视化展示的综合练习项目
 
 ## 许可证
 
-本项目使用 [MIT License](LICENSE)。
+本项目采用 [MIT License](LICENSE)。
 
 ## 支持项目
 
-如果这个项目对你有帮助，欢迎给仓库点一个 Star，这会是对项目维护和后续完善很大的支持。
+如果这个项目对你有帮助，欢迎给仓库点亮一个 Star。这会是对项目持续完善与维护非常大的支持。
